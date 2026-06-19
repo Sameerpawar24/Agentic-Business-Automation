@@ -4,8 +4,16 @@ uvicorn
 langchain
 langgraph
 langchain_groq
+langchain-community
 
 pydantic
 python-dotenv
 requests
 pydantic_settings
+
+sqlalchemy
+aiosqlite
+passlib[bcrypt]
+python-jose[cryptography]
+httpx
+alembic
