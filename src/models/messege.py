@@ -10,9 +10,9 @@ class Message(Base):
     id = Column(Integer, primary_key=True)
 
     session_id = Column(
-        Integer,
+        String(36),
         ForeignKey("chat_sessions.id"),
-        nullable=False
+        nullable=False,
     )
 
     role = Column(String, nullable=False)

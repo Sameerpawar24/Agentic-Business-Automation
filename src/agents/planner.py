@@ -1,6 +1,6 @@
 import logging
 from typing import List
-from langchain_groq import ChatGroq
+from src.core.zai_chat import get_fallback_llm
 from langchain_core.messages import HumanMessage, SystemMessage
 from src.core.config import settings
 
@@ -31,10 +31,7 @@ class Planner:
     """
 
     def __init__(self):
-        self.llm = ChatGroq(
-            api_key=settings.GROQ_API_KEY,
-            model=settings.CHAT_MODEL,
-        )
+        self.llm = get_fallback_llm()
 
     def plan(self, task: str) -> List[str]:
         """

@@ -1,5 +1,7 @@
+import uuid
+
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from src.database.base import get_db
 from src.models.workflow_run import WorkflowRun
@@ -17,7 +19,7 @@ agent_service = AgentService()
 
 class AgentRunRequest(BaseModel):
     task: str
-    session_id: str = "default-session"
+    session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
 
 class AgentRunResponse(BaseModel):

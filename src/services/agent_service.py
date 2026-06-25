@@ -8,6 +8,7 @@ from src.database.base import SessionLocal
 from src.models.workflow_run import WorkflowRun
 from src.models.tool_call_log import ToolCallLog
 from src.agents.orchestrator import AgentOrchestrator, AgentResult
+from src.services.log_service import LogService
 
 logger = logging.getLogger("agentic.agent_service")
 
@@ -28,7 +29,11 @@ class AgentService:
     1. Delegates task execution to AgentOrchestrator
     2. Persists WorkflowRun record in the DB
     3. Persists ToolCallLog records for every tool call made
+    4. Writes unified ActivityLog entries
     """
+
+    def __init__(self):
+        self.log_service = LogService()
 
     def run(self, task: str, session_id: str) -> dict:
         """
@@ -57,9 +62,36 @@ class AgentService:
             run_record.result = result.final_answer
             run_record.steps_log = result.steps
             run_record.error = result.error
+            run_record.total_tokens = result.total_tokens
             run_record.duration_ms = result.duration_ms
             run_record.finished_at = datetime.utcnow()
             db.commit()
+
+            # Unified activity log
+            try:
+                self.log_service.create(
+                    log_type="agent",
+                    session_id=session_id,
+                    run_id=run_id,
+                    task=task,
+                    message=task,
+                    response=result.final_answer,
+                    model_name=result.model_name,
+                    prompt_tokens=result.prompt_tokens,
+                    completion_tokens=result.completion_tokens,
+                    total_tokens=result.total_tokens,
+                    latency_ms=round(result.duration_ms, 2),
+                    success=result.success,
+                    error=result.error,
+                    meta={
+                        "plan": result.plan,
+                        "tool_calls_made": result.tool_calls_made,
+                        "steps": result.steps,
+                    },
+                    db=db,
+                )
+            except Exception as log_exc:
+                logger.warning("Could not persist agent activity log: %s", log_exc)
 
             # Log each tool call
             for step in result.steps:

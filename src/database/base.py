@@ -19,6 +19,9 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
+# Register all ORM models so relationship mappers resolve on first query.
+import src.models  # noqa: E402, F401
+
 
 def get_db():
     """FastAPI dependency — yields a DB session and ensures it is closed after use."""

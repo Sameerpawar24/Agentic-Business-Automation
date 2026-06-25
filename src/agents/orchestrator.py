@@ -3,7 +3,7 @@ import time
 from typing import List, Optional
 from dataclasses import dataclass, field
 
-from langchain_groq import ChatGroq
+from src.core.zai_chat import get_fallback_llm
 from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import HumanMessage
 
@@ -12,6 +12,7 @@ from src.tools.tool_registry import ALL_TOOLS
 from src.agents.memory import get_checkpointer, build_config
 from src.agents.planner import Planner
 from src.core.exceptions import AgentTimeoutError
+from src.utils.llm_metadata import aggregate_usage
 
 logger = logging.getLogger("agentic.orchestrator")
 
@@ -28,6 +29,10 @@ class AgentResult:
     duration_ms: float = 0.0
     success: bool = True
     error: Optional[str] = None
+    model_name: str = ""
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
 
 
 class AgentOrchestrator:
@@ -40,10 +45,7 @@ class AgentOrchestrator:
     """
 
     def __init__(self):
-        self.llm = ChatGroq(
-            api_key=settings.GROQ_API_KEY,
-            model=settings.CHAT_MODEL,
-        )
+        self.llm = get_fallback_llm()
         self.checkpointer = get_checkpointer()
         self.planner = Planner()
         self.agent = create_react_agent(
@@ -72,6 +74,7 @@ class AgentOrchestrator:
             f"Suggested plan (use as guidance, not strict instructions):\n{plan_text}"
         )
 
+        ai_messages = []
         try:
             final_answer = ""
             step_count = 0
@@ -116,10 +119,14 @@ class AgentOrchestrator:
                     })
 
                 # Extract final AI answer
-                if msg_type == "AIMessage" and last_msg.content:
-                    final_answer = last_msg.content
+                if msg_type == "AIMessage":
+                    ai_messages.append(last_msg)
+                    if last_msg.content:
+                        final_answer = last_msg.content
 
             duration_ms = (time.perf_counter() - start) * 1000
+            usage = aggregate_usage(ai_messages)
+            model_name = usage["model_name"] or settings.CHAT_MODEL
             logger.info(
                 "Agent completed task in %.1f ms | %d steps | tools: %s",
                 duration_ms, step_count, tool_calls_made,
@@ -132,10 +139,15 @@ class AgentOrchestrator:
                 plan=plan,
                 duration_ms=duration_ms,
                 success=True,
+                model_name=model_name,
+                prompt_tokens=usage["prompt_tokens"],
+                completion_tokens=usage["completion_tokens"],
+                total_tokens=usage["total_tokens"],
             )
 
         except AgentTimeoutError as exc:
             duration_ms = (time.perf_counter() - start) * 1000
+            usage = aggregate_usage(ai_messages)
             logger.error("Agent timeout: %s", exc)
             return AgentResult(
                 final_answer="",
@@ -145,9 +157,14 @@ class AgentOrchestrator:
                 duration_ms=duration_ms,
                 success=False,
                 error=str(exc),
+                model_name=usage.get("model_name") or settings.CHAT_MODEL,
+                prompt_tokens=usage.get("prompt_tokens", 0),
+                completion_tokens=usage.get("completion_tokens", 0),
+                total_tokens=usage.get("total_tokens", 0),
             )
         except Exception as exc:
             duration_ms = (time.perf_counter() - start) * 1000
+            usage = aggregate_usage(ai_messages)
             logger.error("Agent error: %s", exc, exc_info=True)
             return AgentResult(
                 final_answer="",
@@ -157,4 +174,8 @@ class AgentOrchestrator:
                 duration_ms=duration_ms,
                 success=False,
                 error=str(exc),
+                model_name=usage.get("model_name") or settings.CHAT_MODEL,
+                prompt_tokens=usage.get("prompt_tokens", 0),
+                completion_tokens=usage.get("completion_tokens", 0),
+                total_tokens=usage.get("total_tokens", 0),
             )

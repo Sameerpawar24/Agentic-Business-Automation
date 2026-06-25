@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     CHAT_MODEL: str = os.getenv("CHAT_MODEL", "llama-3.3-70b-versatile")
 
+    # Z.ai / GLM settings
+    ZAI_API_KEY: str = os.getenv("ZAI_API_KEY", "")
+    ZAI_BASE_URL: str = os.getenv("ZAI_BASE_URL", "https://api.z.ai/api/paas/v4/chat/completions")
+    ZAI_MODEL: str = os.getenv("ZAI_MODEL", "glm-5.2")
+
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./agentic_business.db")
 

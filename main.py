@@ -7,7 +7,7 @@ from src.core.exceptions import register_exception_handlers
 from src.database.init_db import create_all_tables
 
 from src.api.v1 import test_api, chat
-from src.api.v1 import agent, invoices, analytics
+from src.api.v1 import agent, invoices, analytics, logs
 
 
 @asynccontextmanager
@@ -45,6 +45,7 @@ def create_app() -> FastAPI:
     app.include_router(agent.app)
     app.include_router(invoices.app)
     app.include_router(analytics.app)
+    app.include_router(logs.app)
 
     return app
 

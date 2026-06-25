@@ -1,15 +1,19 @@
+import uuid
+
 from src.database.base import Base
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, func, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from sqlalchemy import Enum
 
+
+def _new_session_id() -> str:
+    return str(uuid.uuid4())
 
 
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
-    id = Column(Integer, primary_key=True)
+    id = Column(String(36), primary_key=True, default=_new_session_id)
     user_id = Column(
         Integer,
         ForeignKey("users.id"),

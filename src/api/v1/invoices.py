@@ -61,6 +61,18 @@ async def create_invoice(data: InvoiceCreate, db: Session = Depends(get_db)):
     return _invoice_to_dict(inv)
 
 
+@app.post("/seed", summary="Seed 10 demo invoices")
+async def seed_invoices(db: Session = Depends(get_db)):
+    """
+    Insert 10 realistic demo invoices (Acme Corp, Stark Industries, etc.).
+    Safe to call multiple times — skips if invoices already exist.
+    """
+    count = invoice_service.seed_demo(db)
+    if count == 0:
+        return {"message": "Invoices already exist — nothing seeded.", "seeded": 0}
+    return {"message": f"Successfully seeded {count} demo invoices.", "seeded": count}
+
+
 @app.get("/{invoice_id}", summary="Get invoice by ID")
 async def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
     """Retrieve a single invoice by its integer ID."""
@@ -77,15 +89,3 @@ async def update_invoice(invoice_id: int, data: InvoiceUpdate, db: Session = Dep
     if not inv:
         raise HTTPException(status_code=404, detail=f"Invoice {invoice_id} not found.")
     return _invoice_to_dict(inv)
-
-
-@app.post("/seed", summary="Seed 10 demo invoices")
-async def seed_invoices(db: Session = Depends(get_db)):
-    """
-    Insert 10 realistic demo invoices (Acme Corp, Stark Industries, etc.).
-    Safe to call multiple times — skips if invoices already exist.
-    """
-    count = invoice_service.seed_demo(db)
-    if count == 0:
-        return {"message": "Invoices already exist — nothing seeded.", "seeded": 0}
-    return {"message": f"Successfully seeded {count} demo invoices.", "seeded": count}
