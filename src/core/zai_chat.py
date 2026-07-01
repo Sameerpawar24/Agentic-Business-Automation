@@ -171,6 +171,13 @@ class FallbackChatModel(BaseChatModel):
             logger.warning("Primary model invoke failed: %s. Falling back to secondary.", exc)
             return self.secondary.invoke(input, config=config, **kwargs)
 
+    def stream(self, input: Any, config: Optional[Any] = None, **kwargs: Any):
+        try:
+            yield from self.primary.stream(input, config=config, **kwargs)
+        except Exception as exc:
+            logger.warning("Primary model stream failed: %s. Falling back to secondary.", exc)
+            yield from self.secondary.stream(input, config=config, **kwargs)
+
     def bind_tools(self, tools: list, **kwargs: Any) -> Any:
         # Wrap primary and secondary bound runnables in a new FallbackChatModel instance
         bound_primary = self.primary.bind_tools(tools, **kwargs)

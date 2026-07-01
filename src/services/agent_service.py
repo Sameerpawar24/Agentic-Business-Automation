@@ -1,19 +1,20 @@
 import logging
-import json
 from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.orm import Session
+
 from src.database.base import SessionLocal
 from src.models.workflow_run import WorkflowRun
 from src.models.tool_call_log import ToolCallLog
 from src.agents.orchestrator import AgentOrchestrator, AgentResult
+from src.agents.planner import Planner
 from src.services.log_service import LogService
 
 logger = logging.getLogger("agentic.agent_service")
 
-# Singleton orchestrator — instantiated once, reused across requests
 _orchestrator: Optional[AgentOrchestrator] = None
+_planner: Optional[Planner] = None
 
 
 def _get_orchestrator() -> AgentOrchestrator:
@@ -23,41 +24,112 @@ def _get_orchestrator() -> AgentOrchestrator:
     return _orchestrator
 
 
+def _get_planner() -> Planner:
+    global _planner
+    if _planner is None:
+        _planner = Planner()
+    return _planner
+
+
 class AgentService:
     """
-    Business-layer service that:
-    1. Delegates task execution to AgentOrchestrator
-    2. Persists WorkflowRun record in the DB
-    3. Persists ToolCallLog records for every tool call made
-    4. Writes unified ActivityLog entries
+    Business-layer service for agent planning, human approval, and execution.
     """
 
     def __init__(self):
         self.log_service = LogService()
 
-    def run(self, task: str, session_id: str) -> dict:
-        """
-        Run a task through the agent and return a serializable result dict.
-        Also writes audit records to the database.
-        """
+    def create_plan(self, task: str, session_id: str) -> dict:
+        """Generate a plan and persist it awaiting human approval."""
         db: Session = SessionLocal()
-        run_record = WorkflowRun(
-            session_id=session_id,
-            workflow_type="agent_task",
-            input_payload=task,
-            status="running",
-            started_at=datetime.utcnow(),
-        )
-        db.add(run_record)
-        db.commit()
-        db.refresh(run_record)
+        try:
+            plan = _get_planner().plan(task)
+            run_record = WorkflowRun(
+                session_id=session_id,
+                workflow_type="agent_task",
+                input_payload=task,
+                status="awaiting_approval",
+                plan=plan,
+                started_at=datetime.utcnow(),
+            )
+            db.add(run_record)
+            db.commit()
+            db.refresh(run_record)
+            return {
+                "run_id": run_record.id,
+                "session_id": session_id,
+                "task": task,
+                "plan": plan,
+                "status": run_record.status,
+            }
+        finally:
+            db.close()
+
+    def approve_and_run(self, run_id: int, approved: bool = True) -> dict:
+        """Approve or reject a pending plan; execute only when approved."""
+        db: Session = SessionLocal()
+        try:
+            run_record = db.query(WorkflowRun).filter(WorkflowRun.id == run_id).first()
+            if not run_record:
+                raise ValueError(f"Workflow run {run_id} not found.")
+            if run_record.status != "awaiting_approval":
+                raise ValueError(
+                    f"Run {run_id} is not awaiting approval (status={run_record.status})."
+                )
+
+            if not approved:
+                run_record.status = "rejected"
+                run_record.finished_at = datetime.utcnow()
+                db.commit()
+                return {
+                    "run_id": run_id,
+                    "session_id": run_record.session_id,
+                    "task": run_record.input_payload,
+                    "plan": run_record.plan or [],
+                    "status": "rejected",
+                    "message": "Plan rejected by user. No actions were executed.",
+                }
+
+            return self._execute_run(db, run_record)
+        finally:
+            db.close()
+
+    def run(self, task: str, session_id: str) -> dict:
+        """Direct execution without approval (dev / quick-run)."""
+        db: Session = SessionLocal()
+        try:
+            run_record = WorkflowRun(
+                session_id=session_id,
+                workflow_type="agent_task",
+                input_payload=task,
+                status="running",
+                started_at=datetime.utcnow(),
+            )
+            db.add(run_record)
+            db.commit()
+            db.refresh(run_record)
+            return self._execute_run(db, run_record)
+        finally:
+            db.close()
+
+    def _execute_run(self, db: Session, run_record: WorkflowRun) -> dict:
         run_id = run_record.id
+        task = run_record.input_payload
+        session_id = run_record.session_id
+        plan = run_record.plan
+
+        run_record.status = "running"
+        db.commit()
 
         try:
             orchestrator = _get_orchestrator()
-            result: AgentResult = orchestrator.run(task=task, session_id=session_id)
+            result: AgentResult = orchestrator.run(
+                task=task, session_id=session_id, plan=plan
+            )
 
-            # Update WorkflowRun
+            if not run_record.plan:
+                run_record.plan = result.plan
+
             run_record.status = "completed" if result.success else "failed"
             run_record.result = result.final_answer
             run_record.steps_log = result.steps
@@ -67,7 +139,6 @@ class AgentService:
             run_record.finished_at = datetime.utcnow()
             db.commit()
 
-            # Unified activity log
             try:
                 self.log_service.create(
                     log_type="agent",
@@ -93,10 +164,8 @@ class AgentService:
             except Exception as log_exc:
                 logger.warning("Could not persist agent activity log: %s", log_exc)
 
-            # Log each tool call
             for step in result.steps:
                 if step.get("type") == "tool_call":
-                    # Find matching tool_result
                     output = next(
                         (
                             s.get("output", "")
@@ -106,15 +175,16 @@ class AgentService:
                         ),
                         "",
                     )
-                    log = ToolCallLog(
-                        run_id=run_id,
-                        tool_name=step.get("tool", "unknown"),
-                        input=step.get("input", ""),
-                        output=output,
-                        latency_ms=None,
-                        success=result.success,
+                    db.add(
+                        ToolCallLog(
+                            run_id=run_id,
+                            tool_name=step.get("tool", "unknown"),
+                            input=step.get("input", ""),
+                            output=output,
+                            latency_ms=None,
+                            success=result.success,
+                        )
                     )
-                    db.add(log)
             db.commit()
 
             return {
@@ -128,6 +198,7 @@ class AgentService:
                 "duration_ms": round(result.duration_ms, 2),
                 "success": result.success,
                 "error": result.error,
+                "status": run_record.status,
             }
 
         except Exception as exc:
@@ -135,7 +206,5 @@ class AgentService:
             run_record.error = str(exc)
             run_record.finished_at = datetime.utcnow()
             db.commit()
-            logger.error("AgentService.run failed for run_id=%d: %s", run_id, exc, exc_info=True)
+            logger.error("AgentService execution failed for run_id=%d: %s", run_id, exc, exc_info=True)
             raise
-        finally:
-            db.close()

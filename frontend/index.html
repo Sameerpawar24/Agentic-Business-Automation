@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Axiom — Agentic Business Command</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body>
+  <div class="mesh-bg"></div>
+  <div class="grid-overlay"></div>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">◇</div>
+        <div>
+          <h1>Axiom</h1>
+          <span>Business Automation</span>
+        </div>
+      </div>
+      <nav class="nav">
+        <button class="nav-item active" data-view="dashboard">
+          <span class="nav-icon">◈</span> Dashboard
+        </button>
+        <button class="nav-item" data-view="agent">
+          <span class="nav-icon">⚡</span> Agent Studio
+        </button>
+        <button class="nav-item" data-view="chat">
+          <span class="nav-icon">◉</span> Chat
+        </button>
+        <button class="nav-item" data-view="invoices">
+          <span class="nav-icon">▤</span> Invoices
+        </button>
+        <button class="nav-item" data-view="logs">
+          <span class="nav-icon">◎</span> Activity Logs
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="status-pill online"><span></span> API Connected</div>
+        <a href="/docs" target="_blank" class="api-link">OpenAPI ↗</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- DASHBOARD -->
+      <section id="view-dashboard" class="view active">
+        <header class="view-header">
+          <div>
+            <h2>Command Dashboard</h2>
+            <p>Real-time business intelligence & agent activity</p>
+          </div>
+          <button class="btn ghost" id="btn-refresh-dashboard">↻ Refresh</button>
+        </header>
+        <div class="stat-grid" id="dashboard-stats"></div>
+        <div class="panel-grid">
+          <div class="panel">
+            <h3>Invoice Breakdown</h3>
+            <div id="invoice-chart" class="bar-chart"></div>
+          </div>
+          <div class="panel">
+            <h3>Top Customers</h3>
+            <div id="top-customers" class="list-cards"></div>
+          </div>
+          <div class="panel wide">
+            <h3>Tool Usage</h3>
+            <div id="tool-usage" class="chip-row"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- AGENT STUDIO -->
+      <section id="view-agent" class="view">
+        <header class="view-header">
+          <div>
+            <h2>Agent Studio</h2>
+            <p>Plan → Human approval → Execute</p>
+          </div>
+        </header>
+        <div class="agent-layout">
+          <div class="panel agent-input-panel">
+            <label class="field-label">Mission Task</label>
+            <textarea id="agent-task" rows="4" placeholder="e.g. Find all unpaid invoices and send reminder emails to customers"></textarea>
+            <div class="agent-actions">
+              <button class="btn primary" id="btn-generate-plan">① Generate Plan</button>
+              <button class="btn danger ghost" id="btn-quick-run">Quick Run (skip approval)</button>
+            </div>
+            <div class="quick-tasks">
+              <span>Quick:</span>
+              <button class="chip" data-task="List all unpaid invoices">Unpaid invoices</button>
+              <button class="chip" data-task="Generate a full business analytics summary report">Analytics report</button>
+              <button class="chip" data-task="Search for invoices related to Acme Corp">Search Acme</button>
+            </div>
+          </div>
+
+          <div class="panel plan-panel" id="plan-panel" hidden>
+            <div class="plan-header">
+              <h3>Execution Plan</h3>
+              <span class="badge awaiting" id="plan-status">Awaiting Approval</span>
+            </div>
+            <ol class="plan-steps" id="plan-steps"></ol>
+            <div class="approval-bar">
+              <button class="btn success" id="btn-approve">✓ Approve & Execute</button>
+              <button class="btn danger" id="btn-reject">✕ Reject</button>
+            </div>
+          </div>
+
+          <div class="panel result-panel" id="agent-result" hidden>
+            <h3>Execution Result</h3>
+            <div class="result-meta" id="result-meta"></div>
+            <div class="timeline" id="execution-timeline"></div>
+            <div class="answer-box" id="final-answer"></div>
+          </div>
+        </div>
+        <div class="panel" style="margin-top:1.5rem">
+          <h3>Run History</h3>
+          <div class="table-wrap" id="agent-history"></div>
+        </div>
+      </section>
+
+      <!-- CHAT -->
+      <section id="view-chat" class="view">
+        <header class="view-header">
+          <div>
+            <h2>Neural Chat</h2>
+            <p>Session memory with UUID tracking</p>
+          </div>
+          <span class="session-badge" id="chat-session-display">No session</span>
+        </header>
+        <div class="chat-layout">
+          <div class="chat-messages" id="chat-messages">
+            <div class="chat-welcome">
+              <div class="welcome-icon">◉</div>
+              <p>Start a conversation. Your session ID will be generated automatically.</p>
+            </div>
+          </div>
+          <div class="chat-input-bar">
+            <input type="text" id="chat-input" placeholder="Type your message…" />
+            <button class="btn primary" id="btn-send-chat">Send</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- INVOICES -->
+      <section id="view-invoices" class="view">
+        <header class="view-header">
+          <div>
+            <h2>Invoice Ledger</h2>
+            <p>Manage and filter business invoices</p>
+          </div>
+          <div class="header-actions">
+            <select id="invoice-filter">
+              <option value="">All statuses</option>
+              <option value="paid">Paid</option>
+              <option value="unpaid">Unpaid</option>
+              <option value="overdue">Overdue</option>
+            </select>
+            <button class="btn ghost" id="btn-seed-invoices">Seed Demo Data</button>
+          </div>
+        </header>
+        <div class="table-wrap" id="invoices-table"></div>
+      </section>
+
+      <!-- LOGS -->
+      <section id="view-logs" class="view">
+        <header class="view-header">
+          <div>
+            <h2>Activity Logs</h2>
+            <p>Model, tokens, latency & task audit trail</p>
+          </div>
+          <select id="log-filter">
+            <option value="">All types</option>
+            <option value="chat">Chat</option>
+            <option value="agent">Agent</option>
+          </select>
+        </header>
+        <div class="table-wrap" id="logs-table"></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast-container" id="toasts"></div>
+  <div class="loader-overlay" id="loader" hidden>
+    <div class="loader-ring"></div>
+    <span id="loader-text">Processing…</span>
+  </div>
+
+  <script src="/assets/app.js"></script>
+</body>
+</html>

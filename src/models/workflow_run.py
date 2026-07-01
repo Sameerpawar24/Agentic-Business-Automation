@@ -10,8 +10,9 @@ class WorkflowRun(Base):
     session_id = Column(String, nullable=True, index=True)
     workflow_type = Column(String, nullable=False, default="agent_task")
     input_payload = Column(Text, nullable=False)        # raw task text
-    status = Column(String, default="pending")          # pending | running | completed | failed
-    steps_log = Column(JSON, nullable=True)             # list of step dicts
+    status = Column(String, default="pending")          # awaiting_approval | rejected | running | completed | failed
+    plan = Column(JSON, nullable=True)                  # planner steps awaiting approval
+    steps_log = Column(JSON, nullable=True)             # execution step dicts
     result = Column(Text, nullable=True)                # final agent answer
     error = Column(Text, nullable=True)
     total_tokens = Column(Integer, default=0)

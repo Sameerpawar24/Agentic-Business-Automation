@@ -54,15 +54,16 @@ class AgentOrchestrator:
             checkpointer=self.checkpointer,
         )
 
-    def run(self, task: str, session_id: str) -> AgentResult:
+    def run(self, task: str, session_id: str, plan: Optional[List[str]] = None) -> AgentResult:
         """
         Execute a task using the ReAct agent.
-        1. Run Planner to decompose task into steps
+        1. Run Planner to decompose task into steps (unless plan is provided)
         2. Execute agent with the full task (LangGraph handles ReAct internally)
         3. Collect steps, tool calls, and final answer
         """
         start = time.perf_counter()
-        plan = self.planner.plan(task)
+        if plan is None:
+            plan = self.planner.plan(task)
         config = build_config(session_id)
         steps_log = []
         tool_calls_made = []

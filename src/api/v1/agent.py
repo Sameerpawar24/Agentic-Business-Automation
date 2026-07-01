@@ -22,30 +22,66 @@ class AgentRunRequest(BaseModel):
     session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
 
+class AgentApproveRequest(BaseModel):
+    run_id: int
+    approved: bool = True
+
+
 class AgentRunResponse(BaseModel):
     run_id: int
     session_id: str
     task: str
     plan: list
-    steps: list
-    tool_calls_made: list
-    final_answer: str
-    duration_ms: float
-    success: bool
+    steps: list = []
+    tool_calls_made: list = []
+    final_answer: str = ""
+    duration_ms: float = 0.0
+    success: bool = True
     error: str | None = None
+    status: str | None = None
+
+
+class AgentPlanResponse(BaseModel):
+    run_id: int
+    session_id: str
+    task: str
+    plan: list
+    status: str
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
-@app.post("/run", response_model=AgentRunResponse, summary="Run an agentic task")
+@app.post("/plan", response_model=AgentPlanResponse, summary="Generate plan for human approval")
+async def plan_agent(request: AgentRunRequest):
+    """
+    Step 1: Generate a plan from the task and wait for human approval.
+    No tools are executed until `/agent/approve` is called with `approved: true`.
+    """
+    try:
+        return agent_service.create_plan(task=request.task, session_id=request.session_id)
+    except Exception as exc:
+        logger.error("Agent plan failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/approve", summary="Approve or reject a pending plan")
+async def approve_agent(request: AgentApproveRequest):
+    """
+    Step 2: Approve to execute the plan, or reject to cancel without running tools.
+    """
+    try:
+        return agent_service.approve_and_run(run_id=request.run_id, approved=request.approved)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.error("Agent approve failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/run", response_model=AgentRunResponse, summary="Run an agentic task (skip approval)")
 async def run_agent(request: AgentRunRequest):
     """
-    Execute a natural-language business task using the ReAct agent.
-
-    **Example tasks:**
-    - "Find all unpaid invoices and send reminder emails to customers"
-    - "Generate a full business analytics summary report"
-    - "Search for invoices related to Acme Corp"
+    Execute immediately without human approval (quick-run / dev mode).
     """
     try:
         result = agent_service.run(task=request.task, session_id=request.session_id)
@@ -71,6 +107,7 @@ async def get_history(limit: int = 20, db: Session = Depends(get_db)):
             "status": r.status,
             "workflow_type": r.workflow_type,
             "input_payload": r.input_payload,
+            "plan": r.plan or [],
             "result": r.result,
             "duration_ms": r.duration_ms,
             "started_at": r.started_at.isoformat() if r.started_at else None,
@@ -92,7 +129,7 @@ async def get_run(run_id: int, db: Session = Depends(get_db)):
         "status": run.status,
         "workflow_type": run.workflow_type,
         "input_payload": run.input_payload,
-        "plan": [],
+        "plan": run.plan or [],
         "steps_log": run.steps_log or [],
         "result": run.result,
         "error": run.error,
